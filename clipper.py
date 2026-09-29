@@ -50,6 +50,8 @@ class Clipper:
         *,
         stamp_timestamp: float | None = None,
         reservation_id: str | None = None,
+        name_prefix: str = "apex",
+        normalize_to_1080: bool = False,
     ) -> Path:
         """Produce one 16:9 MP4 for an already-grouped event window.
 
@@ -59,8 +61,10 @@ class Clipper:
         """
         if end_timestamp <= start_timestamp:
             raise ValueError("Clip end timestamp must be greater than its start timestamp.")
+        if not re.fullmatch(r"[A-Za-z0-9_]+", name_prefix):
+            raise ValueError("Invalid clip filename prefix.")
         stamp = int(stamp_timestamp if stamp_timestamp is not None else start_timestamp)
-        destination = self.settings.clips_dir / f"apex_{stamp}_source.mp4"
+        destination = self.settings.clips_dir / f"{name_prefix}_{stamp}_source.mp4"
         duration = end_timestamp - start_timestamp
         try:
             if self.settings.source_kind == "vod":
@@ -68,6 +72,10 @@ class Clipper:
                     "-ss", f"{max(0.0, start_timestamp):.3f}", "-i", source_url, "-t",
                     str(duration),
                     "-map", "0:v:0", "-map", "0:a?",
+                    *(
+                        ["-vf", "scale=1920:1080:flags=lanczos"]
+                        if normalize_to_1080 else []
+                    ),
                 ], ["-c:a", "aac", "-movflags", "+faststart", "-y", str(destination)])
             else:
                 # Give FFmpeg enough time to close the segment containing the final

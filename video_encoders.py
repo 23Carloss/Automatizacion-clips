@@ -31,9 +31,25 @@ async def encoder_is_available(ffmpeg_binary: str, encoder: str) -> bool:
     return process.returncode == 0
 
 
-def encoder_arguments(encoder: str, *, quality: int, threads: int, fast: bool) -> list[str]:
-    """Build comparable high-quality settings for each supported H.264 encoder."""
+def encoder_arguments(
+    encoder: str, *, quality: int, threads: int, fast: bool,
+    target_kbps: int | None = None, max_kbps: int | None = None,
+) -> list[str]:
+    """Build a quality encode, optionally capped for platform publishing."""
+    capped = target_kbps is not None or max_kbps is not None
+    if capped and (target_kbps is None or max_kbps is None or not 0 < target_kbps <= max_kbps):
+        raise ValueError("A capped encode requires positive target and maximum bitrates.")
+    rate = (
+        ["-b:v", f"{target_kbps}k", "-maxrate", f"{max_kbps}k",
+         "-bufsize", f"{max_kbps * 2}k"]
+        if capped else []
+    )
     if encoder == "h264_amf":
+        if capped:
+            return [
+                "-c:v", encoder, "-usage", "high_quality", "-quality", "quality",
+                "-rc", "vbr_peak", *rate, "-profile:v", "high",
+            ]
         return [
             "-c:v", encoder,
             "-usage", "high_quality",
@@ -46,9 +62,8 @@ def encoder_arguments(encoder: str, *, quality: int, threads: int, fast: bool) -
         ]
     if encoder == "h264_qsv":
         return [
-            "-c:v", encoder,
-            "-preset", "fast" if fast else "slow",
-            "-global_quality", str(quality),
+            "-c:v", encoder, "-preset", "fast" if fast else "slow",
+            *(rate if capped else ["-global_quality", str(quality)]),
             "-profile:v", "high",
         ]
     if encoder == "h264_nvenc":
@@ -57,7 +72,7 @@ def encoder_arguments(encoder: str, *, quality: int, threads: int, fast: bool) -
             "-preset", "p4" if fast else "p6",
             "-rc", "vbr",
             "-cq", str(quality),
-            "-b:v", "0",
+            *(rate if capped else ["-b:v", "0"]),
             "-profile:v", "high",
         ]
     if encoder == "libx264":
@@ -65,6 +80,7 @@ def encoder_arguments(encoder: str, *, quality: int, threads: int, fast: bool) -
             "-c:v", encoder,
             "-crf", str(quality),
             "-preset", "fast" if fast else "slow",
+            *(["-maxrate", f"{max_kbps}k", "-bufsize", f"{max_kbps * 2}k"] if capped else []),
             "-x264-params", "colorprim=bt709:transfer=bt709:colormatrix=bt709:range=tv",
             "-threads", str(threads),
         ]

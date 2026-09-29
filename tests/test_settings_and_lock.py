@@ -45,6 +45,8 @@ class SettingsAndLockTests(unittest.TestCase):
             (1150, 110, 730, 230),
         )
         self.assertEqual(settings.sample_fps, 2.0)
+        self.assertEqual((settings.gameplay_crop.x, settings.gameplay_crop.width), (480, 960))
+        self.assertEqual((settings.vertical_video_target_kbps, settings.vertical_video_max_kbps), (18000, 22000))
 
     def test_second_instance_cannot_acquire_lock(self) -> None:
         with tempfile.TemporaryDirectory() as directory:

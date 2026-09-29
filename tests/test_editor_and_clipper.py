@@ -46,6 +46,12 @@ class EditorAndClipperTests(unittest.IsolatedAsyncioTestCase):
         self.assertEqual(editor._run_render.await_count, 2)
         self.assertEqual(editor._run_render.await_args_list[0].args[-1], "h264_nvenc")
         self.assertEqual(editor._run_render.await_args_list[1].args[-1], "libx264")
+        video_filter = editor._run_render.await_args_list[0].args[2]
+        self.assertIn("crop=960:1080:480:0", video_filter)
+        self.assertIn("scale=1080:-2:flags=lanczos", video_filter)
+        self.assertIn("boxblur=10:1", video_filter)
+        self.assertIn("overlay=(W-w)/2:(H-h)/2", video_filter)
+        self.assertNotIn("scale=1080:1920:flags=lanczos[base]", video_filter)
 
     async def test_dashboard_cancellation_terminates_ffmpeg_and_removes_partial_output(self) -> None:
         class FakeProcess:
@@ -153,10 +159,27 @@ class EditorAndClipperTests(unittest.IsolatedAsyncioTestCase):
         self.assertEqual(command[command.index("-crf") + 1], "16")
         self.assertEqual(command[command.index("-preset") + 1], "slow")
         self.assertIn("colorprim=bt709", command[command.index("-x264-params") + 1])
-        self.assertEqual(command[command.index("-b:a") + 1], "192k")
+        self.assertEqual(command[command.index("-b:a") + 1], "128k")
+        self.assertEqual(command[command.index("-maxrate") + 1], "22000k")
+        self.assertEqual(command[command.index("-bufsize") + 1], "44000k")
         self.assertEqual(command[command.index("-fps_mode") + 1], "passthrough")
         self.assertEqual(command[command.index("-colorspace") + 1], "bt709")
         self.assertNotIn("-r", command)
+
+    def test_vertical_encoders_apply_platform_bitrate_ceiling(self) -> None:
+        for encoder in ("h264_amf", "h264_qsv", "h264_nvenc", "libx264"):
+            with self.subTest(encoder=encoder):
+                arguments = encoder_arguments(
+                    encoder, quality=16, threads=2, fast=False,
+                    target_kbps=18000, max_kbps=22000,
+                )
+                self.assertEqual(arguments[arguments.index("-maxrate") + 1], "22000k")
+                self.assertEqual(arguments[arguments.index("-bufsize") + 1], "44000k")
+                if encoder != "libx264":
+                    self.assertEqual(arguments[arguments.index("-b:v") + 1], "18000k")
+        source = encoder_arguments("h264_qsv", quality=14, threads=2, fast=True)
+        self.assertNotIn("-maxrate", source)
+        self.assertEqual(source[source.index("-global_quality") + 1], "14")
 
     async def test_vod_clipper_requests_twenty_before_and_five_after(self) -> None:
         settings = Settings(twitch_url="https://example.invalid/vod", source_kind="vod")
@@ -170,6 +193,25 @@ class EditorAndClipperTests(unittest.IsolatedAsyncioTestCase):
         self.assertEqual(arguments[arguments.index("-t") + 1], "25.0")
         self.assertEqual(arguments[arguments.index("-threads") + 1], "2")
         self.assertEqual(arguments[arguments.index("-crf") + 1], "14")
+
+    async def test_local_recording_clip_uses_unique_name_and_1080_source(self) -> None:
+        settings = Settings(
+            twitch_url="https://example.invalid", source_kind="vod"
+        )
+        clipper = Clipper(settings)
+        clipper._run = AsyncMock()  # type: ignore[method-assign]
+
+        output = await clipper.create_clip_window(
+            80.0, 105.0, "D:/recording.mp4", stamp_timestamp=100.0,
+            name_prefix="ps5_session", normalize_to_1080=True,
+        )
+
+        arguments = clipper._run.await_args.args[0]
+        self.assertEqual(output.name, "ps5_session_100_source.mp4")
+        self.assertEqual(
+            arguments[arguments.index("-vf") + 1],
+            "scale=1920:1080:flags=lanczos",
+        )
 
     async def test_bleedout_vod_requests_twenty_five_before_and_five_after(self) -> None:
         settings = Settings(twitch_url="https://example.invalid/vod", source_kind="vod")

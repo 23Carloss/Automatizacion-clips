@@ -67,8 +67,12 @@ class ApexVerticalEditor:
         gameplay, top = self.settings.gameplay_crop, self.settings.top_hud_roi
         health, ammo = self.settings.health_hud_roi, self.settings.ammo_hud_roi
         complex_filter = (
-            "[0:v]split=4[v0][v1][v2][v3];"
-            f"[v0]crop={gameplay.width}:{gameplay.height}:{gameplay.x}:{gameplay.y},scale=1080:1920:flags=lanczos[base];"
+            "[0:v]scale=1920:1080:flags=lanczos,split=5[v0][v1][v2][v3][v4];"
+            "[v4]scale=270:480:force_original_aspect_ratio=increase:flags=lanczos,"
+            "crop=270:480,boxblur=10:1,scale=1080:1920:flags=lanczos[back];"
+            f"[v0]crop={gameplay.width}:{gameplay.height}:{gameplay.x}:{gameplay.y},"
+            "scale=1080:-2:flags=lanczos[game];"
+            "[back][game]overlay=(W-w)/2:(H-h)/2[base];"
             f"[v1]crop={top.width}:{top.height}:{top.x}:{top.y}[top];"
             f"[v2]crop={health.width}:{health.height}:{health.x}:{health.y}[health];"
             f"[v3]crop={ammo.width}:{ammo.height}:{ammo.x}:{ammo.y}[ammo];"
@@ -311,13 +315,15 @@ class ApexVerticalEditor:
             quality=self.settings.ffmpeg_vertical_quality,
             threads=self.settings.ffmpeg_encoding_threads,
             fast=False,
+            target_kbps=self.settings.vertical_video_target_kbps,
+            max_kbps=self.settings.vertical_video_max_kbps,
         )
         return [
             self.settings.ffmpeg_binary, "-hide_banner", "-loglevel", "error",
             "-progress", "pipe:1", "-nostats", "-i", str(input_path),
             "-filter_complex_threads", str(self.settings.ffmpeg_encoding_threads),
             "-filter_complex", complex_filter, "-map", "[out]", "-map", "0:a?",
-            "-c:a", "aac", "-b:a", "192k", *codec_args,
+            "-c:a", "aac", "-b:a", "128k", *codec_args,
             "-fps_mode", "passthrough", "-pix_fmt", "yuv420p",
             "-color_range", "tv", "-colorspace", "bt709",
             "-color_primaries", "bt709", "-color_trc", "bt709",

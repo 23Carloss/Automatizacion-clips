@@ -9,12 +9,15 @@ import asyncio
 from datetime import datetime
 from math import ceil
 from pathlib import Path
+import shutil
 
 import streamlit as st
 
 from config import Roi, Settings
 from database import ClipRecord, ClipRepository
+from diagnostics.clip_quality import create_report
 from editor import ApexVerticalEditor, RenderCancelled
+from recording_import import RecordingProgress, import_recording
 from telegram_bot import delete_clip_files, send_approval_once
 
 PIPELINE_STATES = (
@@ -89,7 +92,9 @@ def process_ps_app_upload(uploaded_file, settings: Settings, repository: ClipRep
         raise ValueError("Solo se permiten archivos .mp4.")
     name = f"psapp_{datetime.now():%Y%m%d_%H%M%S_%f}_source.mp4"
     source_path = settings.clips_dir / name
-    source_path.write_bytes(uploaded_file.getbuffer())
+    uploaded_file.seek(0)
+    with source_path.open("wb") as destination:
+        shutil.copyfileobj(uploaded_file, destination, length=1024 * 1024)
     clip_id = run_async(repository.create_clip(name, "UPLOADED", "PS_APP"))
     try:
         run_async(repository.update_clip(clip_id, status="PROCESSING"))
@@ -323,7 +328,9 @@ def main() -> None:
     except Exception as exc:
         st.error(f"No se pudo iniciar MySQL: {exc}")
         st.stop()
-    upload_tab, pipeline_tab, settings_tab = st.tabs(["Carga manual PS App", "Pipeline de clips", "Ajustes"])
+    upload_tab, pipeline_tab, quality_tab, settings_tab = st.tabs(
+        ["Cargas y grabaciones", "Pipeline de clips", "Calidad", "Ajustes"]
+    )
 
     with upload_tab:
         st.write("Carga un clip horizontal descargado desde PS App. Se renderiza a 9:16 y queda pendiente de aprobación.")
@@ -338,8 +345,91 @@ def main() -> None:
             except Exception as exc:
                 st.error(f"El clip quedó disponible para reintento: {exc}")
 
+        st.divider()
+        st.subheader("Analizar una grabación completa")
+        st.write(
+            "Copia la grabación de PS5 al equipo, por ejemplo desde una unidad USB. "
+            "El programa la lee por partes y crea clips solo cuando detecta eventos; "
+            "no copia el video de una hora a la carpeta de clips."
+        )
+        recording_path = st.text_input("Ruta local del archivo de video")
+        if st.button("Buscar eventos y crear clips", disabled=not recording_path.strip()):
+            progress_bar = st.progress(0, text="Preparando la grabación…")
+
+            async def show_progress(progress: RecordingProgress) -> None:
+                progress_bar.progress(
+                    min(100, max(0, round(progress.percent))),
+                    text=(
+                        f"{progress.stage}: {progress.percent:.0f}% · "
+                        f"{progress.events} eventos · "
+                        f"{progress.clips_done}/{progress.clips_total} clips"
+                    ),
+                )
+
+            try:
+                with st.spinner("Analizando la grabación y preparando los clips…"):
+                    result = run_async(import_recording(
+                        Path(recording_path.strip().strip('"')),
+                        settings, repository, show_progress,
+                    ))
+                st.success(
+                    f"Análisis terminado: {result.events} eventos en {result.groups} grupos; "
+                    f"{result.clips_created} clips creados y {result.clips_failed} fallidos."
+                )
+                if result.clips_created:
+                    st.info("Revisa los clips en Telegram o en la etapa Por aprobar.")
+            except Exception as exc:
+                st.error(f"No se pudo analizar la grabación: {exc}")
+
     with pipeline_tab:
         pipeline_board(settings, repository)
+
+    with quality_tab:
+        st.write(
+            "Compara el mismo instante del clip original y del render vertical. "
+            "Si guardaste una copia del Reel publicado, añade su ruta local para "
+            "ver también el resultado de Instagram."
+        )
+        sources = sorted(settings.clips_dir.glob("*_source.mp4"), reverse=True)
+        if not sources:
+            st.info("Todavía no hay clips fuente para comparar.")
+        else:
+            selected = st.selectbox(
+                "Clip fuente", sources, format_func=lambda path: path.name
+            )
+            vertical = selected.with_name(
+                selected.name.removesuffix("_source.mp4") + "_vertical.mp4"
+            )
+            if not vertical.is_file():
+                st.info("El render vertical de este clip todavía no está disponible.")
+            else:
+                second = st.number_input(
+                    "Segundo del clip", min_value=0.0, value=5.0, step=0.5
+                )
+                published_path = st.text_input(
+                    "Ruta local del Reel descargado (opcional)"
+                )
+                if st.button("Comparar calidad"):
+                    try:
+                        published = (
+                            Path(published_path.strip().strip('"'))
+                            if published_path.strip() else None
+                        )
+                        report = create_report(
+                            selected, vertical, published, seconds=[float(second)]
+                        )
+                        st.caption(f"Reporte guardado en {report}")
+                        image_count = 3 if published is not None else 2
+                        images = [
+                            report.parent / f"01_{index}.png"
+                            for index in range(1, image_count + 1)
+                        ]
+                        columns = st.columns(image_count)
+                        labels = ["Fuente", "Vertical", "Instagram"]
+                        for column, image_path, label in zip(columns, images, labels):
+                            column.image(str(image_path), caption=label, use_container_width=True)
+                    except Exception as exc:
+                        st.error(f"No se pudo comparar el clip: {exc}")
 
     with settings_tab:
         st.write("El detector usa exclusivamente la ROI de notificación central. Los cambios se aplican a esta sesión del dashboard; copia los valores verificados a `config.py` para hacerlos permanentes.")

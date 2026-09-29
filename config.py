@@ -70,6 +70,8 @@ class Settings:
     ffmpeg_source_quality: int = 14
     ffmpeg_vertical_encoder: str = "libx264"
     ffmpeg_vertical_quality: int = 16
+    vertical_video_target_kbps: int = 18000
+    vertical_video_max_kbps: int = 22000
     ffmpeg_preview_encoder: str = "auto"
     tesseract_enabled: bool = True
     player_gamertag: str = ""
@@ -103,7 +105,7 @@ class Settings:
     top_hud_roi: Roi = field(default_factory=lambda: Roi(1380, 30, 500, 100))
     health_hud_roi: Roi = field(default_factory=lambda: Roi(30, 910, 450, 140))
     ammo_hud_roi: Roi = field(default_factory=lambda: Roi(1440, 910, 450, 140))
-    gameplay_crop: Roi = field(default_factory=lambda: Roi(656, 0, 607, 1080))
+    gameplay_crop: Roi = field(default_factory=lambda: Roi(480, 0, 960, 1080))
     youtube_client_secrets: str = ""
     youtube_token_file: str = "youtube_token.json"
     instagram_access_token: str = ""
@@ -158,6 +160,8 @@ class Settings:
             ffmpeg_source_quality=int(os.getenv("FFMPEG_SOURCE_QUALITY", "14")),
             ffmpeg_vertical_encoder=os.getenv("FFMPEG_VERTICAL_ENCODER", "libx264").strip().lower(),
             ffmpeg_vertical_quality=int(os.getenv("FFMPEG_VERTICAL_QUALITY", "16")),
+            vertical_video_target_kbps=int(os.getenv("VERTICAL_VIDEO_TARGET_KBPS", "18000")),
+            vertical_video_max_kbps=int(os.getenv("VERTICAL_VIDEO_MAX_KBPS", "22000")),
             ffmpeg_preview_encoder=os.getenv("FFMPEG_PREVIEW_ENCODER", "auto").strip().lower(),
             tesseract_enabled=os.getenv("TESSERACT_ENABLED", "true").lower() == "true",
             player_gamertag=os.getenv("PLAYER_GAMERTAG", "").strip(),
@@ -177,6 +181,7 @@ class Settings:
             ocr_max_live_lag_seconds=float(os.getenv("OCR_MAX_LIVE_LAG_SECONDS", "3")),
             notification_roi=_roi_from_env("NOTIFICATION_ROI", DEFAULT_NOTIFICATION_ROI),
             killfeed_roi=_roi_from_env("KILLFEED_ROI", DEFAULT_KILLFEED_ROI),
+            gameplay_crop=_roi_from_env("GAMEPLAY_CROP", (480, 0, 960, 1080)),
             mysql_host=os.getenv("MYSQL_HOST", "127.0.0.1").strip(),
             mysql_port=int(os.getenv("MYSQL_PORT", "3306")),
             mysql_user=os.getenv("MYSQL_USER", "apex_clipper").strip(),
@@ -261,6 +266,13 @@ class Settings:
             raise ValueError("FFMPEG_SOURCE_QUALITY must be between 0 and 51.")
         if not 0 <= setting.ffmpeg_vertical_quality <= 51:
             raise ValueError("FFMPEG_VERTICAL_QUALITY must be between 0 and 51.")
+        if not 1000 <= setting.vertical_video_target_kbps <= setting.vertical_video_max_kbps <= 24000:
+            raise ValueError("Vertical video bitrate must satisfy 1000 <= target <= max <= 24000 kbps.")
+        crop = setting.gameplay_crop
+        if crop.x + crop.width > 1920 or crop.y + crop.height > 1080:
+            raise ValueError("GAMEPLAY_CROP must fit inside the 1920x1080 source frame.")
+        if crop.width * 1080 < 720 * crop.height:
+            raise ValueError("GAMEPLAY_CROP is too narrow and would require excessive enlargement.")
         if not setting.meta_graph_api_version.startswith("v"):
             raise ValueError("META_GRAPH_API_VERSION must look like 'v23.0'.")
         if not setting.instagram_graph_base_url.startswith("https://"):

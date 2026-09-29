@@ -20,7 +20,7 @@ ClipStatus = Literal[
     "UPLOADED", "PROCESSING", "CANCEL_REQUESTED", "PENDING_APPROVAL", "APPROVED_QUEUED",
     "PUBLISHING", "PUBLISHED", "PUBLISH_FAILED", "DISCARDED"
 ]
-ClipSource = Literal["TWITCH", "PS_APP"]
+ClipSource = Literal["TWITCH", "PS_APP", "PS5_RECORDING"]
 
 
 @dataclass(frozen=True, slots=True)
@@ -87,7 +87,7 @@ class ClipRepository:
                     id INT AUTO_INCREMENT PRIMARY KEY,
                     filename VARCHAR(512) NOT NULL,
                     status ENUM('UPLOADED','PROCESSING','CANCEL_REQUESTED','PENDING_APPROVAL','APPROVED_QUEUED','PUBLISHING','PUBLISHED','PUBLISH_FAILED','DISCARDED') NOT NULL,
-                    source ENUM('TWITCH','PS_APP') NOT NULL,
+                    source ENUM('TWITCH','PS_APP','PS5_RECORDING') NOT NULL,
                     timestamp DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
                     telegram_message_id VARCHAR(64) NULL,
                     processing_progress DECIMAL(5,2) NOT NULL DEFAULT 0,
@@ -101,6 +101,13 @@ class ClipRepository:
                 cursor.execute("""
                     ALTER TABLE clips MODIFY COLUMN status
                     ENUM('UPLOADED','PROCESSING','CANCEL_REQUESTED','PENDING_APPROVAL','APPROVED_QUEUED','PUBLISHING','PUBLISHED','PUBLISH_FAILED','DISCARDED') NOT NULL
+                """)
+            cursor.execute("SHOW COLUMNS FROM clips LIKE 'source'")
+            source_column = cursor.fetchone()
+            if source_column and "PS5_RECORDING" not in str(source_column[1]):
+                cursor.execute("""
+                    ALTER TABLE clips MODIFY COLUMN source
+                    ENUM('TWITCH','PS_APP','PS5_RECORDING') NOT NULL
                 """)
             cursor.execute("SHOW COLUMNS FROM clips LIKE 'processing_progress'")
             if cursor.fetchone() is None:
