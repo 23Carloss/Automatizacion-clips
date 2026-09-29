@@ -1,0 +1,11 @@
+.env
+youtube_token.json
+cache/
+clips/
+event_evidence/
+__pycache__/
+*.pyc
+.apex_clipper.lock
+
+.venv/
+diagnostics/quality_reports/

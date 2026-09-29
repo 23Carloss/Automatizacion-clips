@@ -1,0 +1,78 @@
+[
+  {
+    "label": "ELIMINATED",
+    "first_event_at": 18.0,
+    "last_event_at": 20.0,
+    "clip_start": 0.0,
+    "clip_end": 25.0,
+    "duration": 25.0,
+    "events": [
+      {
+        "timestamp": 18.0,
+        "kind": "KNOCKED",
+        "confidence": 0.9985265224091288,
+        "evidence": "DERRIBADO in notification; confirmed in 1 processed frame",
+        "raw_ocr_text": "DERRIBADO 811071 150",
+        "region": "notification"
+      },
+      {
+        "timestamp": 20.0,
+        "kind": "ELIMINATED",
+        "confidence": 0.6803291867816742,
+        "evidence": "PLAYER KILLFEED in owned_killfeed for xNopperabe; confirmed in 1 processed frame",
+        "raw_ocr_text": "xNopperabe donMiguelo]989",
+        "region": "owned_killfeed"
+      }
+    ]
+  },
+  {
+    "label": "SQUAD_ELIMINATED",
+    "first_event_at": 28.0,
+    "last_event_at": 33.0,
+    "clip_start": 8.0,
+    "clip_end": 38.0,
+    "duration": 30.0,
+    "events": [
+      {
+        "timestamp": 28.0,
+        "kind": "KNOCKED",
+        "confidence": 0.9978222509765574,
+        "evidence": "DERRIBADO in notification; confirmed in 1 processed frame",
+        "raw_ocr_text": "DERRIBADO",
+        "region": "notification"
+      },
+      {
+        "timestamp": 29.0,
+        "kind": "KNOCKED",
+        "confidence": 0.9411764705882353,
+        "evidence": "DERRIBADO in notification; confirmed in 1 processed frame",
+        "raw_ocr_text": "ERRIBADO 150",
+        "region": "notification"
+      },
+      {
+        "timestamp": 30.0,
+        "kind": "KNOCKED",
+        "confidence": 0.446558911271949,
+        "evidence": "DERRIBADO in notification; confirmed in 1 processed frame",
+        "raw_ocr_text": "TENCIA; DERRIBADO [GOKU]AITSTICKZNPICKZ",
+        "region": "notification"
+      },
+      {
+        "timestamp": 31.0,
+        "kind": "KNOCKED",
+        "confidence": 0.888650700662458,
+        "evidence": "ASISTENCIA DERRIBADO in notification; confirmed in 1 processed frame",
+        "raw_ocr_text": "ASISTENCIA DERRIBADO [GOKU] HITSTICKZNPICKZ 100",
+        "region": "notification"
+      },
+      {
+        "timestamp": 33.0,
+        "kind": "SQUAD_ELIMINATED",
+        "confidence": 0.724159204999085,
+        "evidence": "ESCUADRON ELIMINADO in notification; confirmed in 1 processed frame",
+        "raw_ocr_text": "ESCUADRÓN ELIMINADO + 100",
+        "region": "notification"
+      }
+    ]
+  }
+]
