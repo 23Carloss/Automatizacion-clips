@@ -73,10 +73,11 @@ class ApexVerticalEditor:
             f"[v0]crop={gameplay.width}:{gameplay.height}:{gameplay.x}:{gameplay.y},"
             "scale=1080:-2:flags=lanczos[game];"
             "[back][game]overlay=(W-w)/2:(H-h)/2[base];"
-            f"[v1]crop={top.width}:{top.height}:{top.x}:{top.y}[top];"
+            f"[v1]crop={top.width}:{top.height}:{top.x}:{top.y},"
+            "scale=1000:320:force_original_aspect_ratio=decrease:flags=lanczos[top];"
             f"[v2]crop={health.width}:{health.height}:{health.x}:{health.y}[health];"
             f"[v3]crop={ammo.width}:{ammo.height}:{ammo.x}:{ammo.y}[ammo];"
-            "[base][top]overlay=290:50[layer1];"
+            "[base][top]overlay=(W-w)/2:20[layer1];"
             "[layer1][health]overlay=30:1750[layer2];"
             "[layer2][ammo]overlay=600:1750,format=yuv420p[out]"
         )

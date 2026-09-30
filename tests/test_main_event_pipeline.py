@@ -163,5 +163,39 @@ class MainEventPipelineTests(unittest.IsolatedAsyncioTestCase):
         self.assertEqual(second_group.first_event_at, 47.0)
 
 
+    async def test_event_worker_reserves_extended_window_for_repeated_victim(self) -> None:
+        main = importlib.import_module("main")
+        settings = Settings(twitch_url="test", player_gamertag="xNopperabe")
+        event_queue: asyncio.Queue[DetectedEvent | TimelineWatermark | None] = asyncio.Queue()
+        ocr_queue: asyncio.Queue[PreparedOcrFrame | None] = asyncio.Queue()
+        ocr_idle = asyncio.Event()
+        ocr_idle.set()
+        tasks: set[asyncio.Task[None]] = set()
+        clipper = AsyncMock()
+        clipper.reserve_live_segments.return_value = "reservation-test"
+
+        await event_queue.put(event(100.0, "ELIMINATED", "xNopperabe R301 VictimOne"))
+        await event_queue.put(event(115.0, "ELIMINATED", "xNopperabe R301 VictimOne"))
+        await event_queue.put(event(158.29, "ELIMINATED", "xNopperabe R301 VictimTwo"))
+        await event_queue.put(None)
+
+        process_group = AsyncMock()
+        with patch.object(main, "process_event_group", process_group):
+            await main.process_event_queue(
+                event_queue, ocr_queue, ocr_idle, settings,
+                "https://example.invalid/live.m3u8",
+                clipper, AsyncMock(), AsyncMock(), AsyncMock(), tasks,
+            )
+            if tasks:
+                await asyncio.gather(*tasks)
+
+        process_group.assert_awaited_once()
+        group = process_group.await_args.args[0]
+        self.assertEqual(len(group.events), 2)
+        self.assertAlmostEqual(group.clip_end, 163.29)
+        reserved_ends = [call.args[1] for call in clipper.reserve_live_segments.await_args_list]
+        self.assertIn(120.0, reserved_ends)
+        self.assertIn(163.29, reserved_ends)
+
 if __name__ == "__main__":
     unittest.main()

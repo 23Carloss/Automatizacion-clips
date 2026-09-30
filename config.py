@@ -54,7 +54,7 @@ class Settings:
     # Kept as a compatibility safety valve. Continuous event grouping replaces
     # the old global cooldown, so the normal value is zero.
     event_cooldown_seconds: float = 0.0
-    event_merge_gap_seconds: float = 8.0
+    event_merge_gap_seconds: float = 50.0
     event_duplicate_window_seconds: float = 8.0
     pre_event_seconds: float = 20.0
     post_event_seconds: float = 5.0
@@ -102,7 +102,8 @@ class Settings:
     # Event regions expressed against a 1920x1080 source frame.
     notification_roi: Roi = field(default_factory=lambda: Roi(*DEFAULT_NOTIFICATION_ROI))
     killfeed_roi: Roi = field(default_factory=lambda: Roi(*DEFAULT_KILLFEED_ROI))
-    top_hud_roi: Roi = field(default_factory=lambda: Roi(1380, 30, 500, 100))
+    # Include the match HUD and every killfeed row, including victim rank icons.
+    top_hud_roi: Roi = field(default_factory=lambda: Roi(1150, 30, 730, 310))
     health_hud_roi: Roi = field(default_factory=lambda: Roi(30, 910, 450, 140))
     ammo_hud_roi: Roi = field(default_factory=lambda: Roi(1440, 910, 450, 140))
     gameplay_crop: Roi = field(default_factory=lambda: Roi(480, 0, 960, 1080))
@@ -144,7 +145,7 @@ class Settings:
             vod_start_offset_seconds=float(os.getenv("VOD_START_OFFSET_SECONDS", "0")),
             sample_fps=float(os.getenv("SAMPLE_FPS", "2")),
             event_cooldown_seconds=float(os.getenv("EVENT_COOLDOWN_SECONDS", "0")),
-            event_merge_gap_seconds=float(os.getenv("EVENT_MERGE_GAP_SECONDS", "8")),
+            event_merge_gap_seconds=float(os.getenv("EVENT_MERGE_GAP_SECONDS", "50")),
             event_duplicate_window_seconds=float(os.getenv("EVENT_DUPLICATE_WINDOW_SECONDS", "8")),
             pre_event_seconds=float(os.getenv("PRE_EVENT_SECONDS", "20")),
             post_event_seconds=float(os.getenv("POST_EVENT_SECONDS", "5")),

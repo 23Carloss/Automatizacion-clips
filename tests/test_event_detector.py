@@ -93,6 +93,32 @@ class ApexEventDetectorTests(unittest.TestCase):
         for timestamp in (1.0, 1.333, 1.667):
             self.assertIsNone(self.detector.process_prepared(self.prepared(timestamp)))
 
+    def test_killfeed_keeps_actor_and_victim_separate(self) -> None:
+        self.detector._ocr_lines = Mock(  # type: ignore[method-assign]
+            side_effect=(
+                self.killfeed("xNopperabe R301 VictimOne"),
+                self.killfeed("xNopperabe R301 VictimTwo"),
+            )
+        )
+        first = self.detector.process_prepared(self.prepared(1.0))
+        second = self.detector.process_prepared(self.prepared(2.0))
+        assert first is not None and second is not None
+        self.assertEqual((first.victim, second.victim), ("VICTIMONE", "VICTIMTWO"))
+        self.assertEqual((first.kind, second.kind), ("ELIMINATED", "ELIMINATED"))
+
+    def test_center_victim_requires_a_readable_name(self) -> None:
+        self.detector._ocr_lines = Mock(  # type: ignore[method-assign]
+            side_effect=(
+                self.center("DERRIBADO 811071 150"),
+                self.center("DERRIBADO VictimOne 100"),
+            )
+        )
+        first = self.detector.process_prepared(self.prepared(1.0))
+        second = self.detector.process_prepared(self.prepared(2.0))
+        assert first is not None and second is not None
+        self.assertIsNone(first.victim)
+        self.assertEqual(second.victim, "VICTIMONE")
+
     def test_player_bleedout_as_actor_is_confirmed(self) -> None:
         self.detector._ocr_lines = Mock(  # type: ignore[method-assign]
             return_value=self.killfeed("[TEAM] xNopperabe [Desangrado] asteria_athxna")

@@ -5,7 +5,6 @@ import asyncio
 import difflib
 import logging
 import re
-import unicodedata
 from dataclasses import dataclass
 from typing import Any, Iterable
 
@@ -13,6 +12,7 @@ import cv2
 import numpy as np
 
 from config import Roi, Settings
+from event_identity import center_victim, killfeed_victim, normalize_text
 
 LOGGER = logging.getLogger("apex_clipper.detector")
 
@@ -42,10 +42,11 @@ class EventMatch:
     text: str
     confidence: float
     keyword_similarity: float
+    victim: str | None = None
 
     @property
-    def confirmation_key(self) -> tuple[str, str, str]:
-        return self.region, self.kind, self.alias
+    def confirmation_key(self) -> tuple[str, str, str, str]:
+        return self.region, self.kind, self.alias, self.victim or ""
 
 
 @dataclass(frozen=True, slots=True)
@@ -56,6 +57,7 @@ class DetectedEvent:
     evidence: str
     raw_ocr_text: str = ""
     region: str = ""
+    victim: str | None = None
 
 
 @dataclass(frozen=True, slots=True)
@@ -104,7 +106,7 @@ class ApexEventDetector:
     def __init__(self, settings: Settings) -> None:
         self.settings = settings
         self._last_event_at = float("-inf")
-        self._candidate_key: tuple[str, str, str] | None = None
+        self._candidate_key: tuple[str, str, str, str] | None = None
         self._candidate_count = 0
         self._candidate_timestamp = 0.0
         self._candidate_last_timestamp = 0.0
@@ -264,9 +266,7 @@ class ApexEventDetector:
 
     @staticmethod
     def _normalize_text(text: str) -> str:
-        decomposed = unicodedata.normalize("NFKD", text.upper())
-        without_accents = "".join(character for character in decomposed if not unicodedata.combining(character))
-        return re.sub(r"[^A-Z0-9]+", " ", without_accents).strip()
+        return normalize_text(text)
 
     @classmethod
     def _aliases_for(cls, allowed_kinds: frozenset[str]) -> Iterable[tuple[str, str]]:
@@ -425,10 +425,11 @@ class ApexEventDetector:
         )
         if result is None:
             return None
-        kind, alias, similarity, _ = result
+        kind, alias, similarity, alias_index = result
         return EventMatch(
             kind, alias, "notification", line.text,
             min(line.confidence, similarity), similarity,
+            center_victim(line.text, alias, alias_index),
         )
 
     def _find_gamertag(self, normalized_text: str) -> tuple[int, int, float] | None:
@@ -482,13 +483,15 @@ class ApexEventDetector:
         )
         if result is None:
             kind, alias, similarity = "ELIMINATED", "PLAYER KILLFEED", gamertag_score
+            victim = killfeed_victim(line.text, gamertag_end)
         else:
             kind, alias, similarity, alias_index = result
             if gamertag_start >= alias_index:
                 LOGGER.info("Ignored killfeed row where player follows the event marker: %r", line.text)
                 return None
+            victim = killfeed_victim(line.text, gamertag_end, alias, alias_index)
         confidence = min(line.confidence, similarity, gamertag_score)
-        return EventMatch(kind, alias, "owned_killfeed", line.text, confidence, similarity)
+        return EventMatch(kind, alias, "owned_killfeed", line.text, confidence, similarity, victim)
 
     def _find_match(self, lines: list[OcrLine], notification_height: int) -> EventMatch | None:
         killfeed_start = notification_height + self.COMBINED_REGION_GAP / 2
@@ -580,4 +583,4 @@ class ApexEventDetector:
         )
         self._last_event_at = confirmation_timestamp
         self._reset_candidate()
-        return DetectedEvent(event_timestamp, match.kind, confidence, evidence, raw_text, match.region)
+        return DetectedEvent(event_timestamp, match.kind, confidence, evidence, raw_text, match.region, match.victim)

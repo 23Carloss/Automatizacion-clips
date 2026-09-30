@@ -10,6 +10,7 @@ import time
 from pathlib import Path
 
 import cv2
+from streamlink.exceptions import StreamlinkError
 
 from clipper import Clipper
 from config import ROOT_DIR, Settings
@@ -79,7 +80,7 @@ async def run() -> None:
         while True:
             try:
                 await monitor.start()
-            except RuntimeError as exc:
+            except (RuntimeError, StreamlinkError) as exc:
                 if settings.source_kind != "live":
                     raise
                 # Telegram approvals and queued publications remain available
@@ -280,8 +281,12 @@ async def process_event_queue(
                 await schedule_ready_groups()
                 return
             if isinstance(item, DetectedEvent):
-                changed = planner.add_event(item)
-                if changed and planner.active is not None:
+                previous_group = planner.active
+                previous_end = previous_group.clip_end if previous_group is not None else float("-inf")
+                accepted = planner.add_event(item)
+                if planner.active is not None and (
+                    accepted or planner.active is not previous_group or planner.active.clip_end > previous_end
+                ):
                     # Pin the pre-fight history as soon as the first event is
                     # known, independently of clipping and rendering work.
                     await reserve_group(planner.active)

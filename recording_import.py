@@ -124,9 +124,8 @@ async def scan_recording(
                     event = await asyncio.to_thread(detector.process_prepared, prepared)
             except Exception:
                 LOGGER.exception("No se pudo inspeccionar el segundo %.2f", timestamp)
-            if event is not None:
+            if event is not None and planner.add_event(event):
                 event_count += 1
-                planner.add_event(event)
                 try:
                     _save_evidence(settings, import_id, event, frame)
                 except Exception:

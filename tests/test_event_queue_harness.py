@@ -65,8 +65,8 @@ class EventGroupPlannerTests(unittest.TestCase):
 
         self.assertEqual(len(groups[0].events), 1)
 
-    def test_real_ocr_sequence_separates_second_fight_at_eight_seconds(self) -> None:
-        planner = EventGroupPlanner(self.settings, merge_gap_seconds=8.0)
+    def test_real_ocr_sequence_keeps_later_activity_in_one_fight(self) -> None:
+        planner = EventGroupPlanner(self.settings)
 
         planner.add_event(event(18.0, "KNOCKED", "DERRIBADO 811071 150"))
         planner.add_event(event(19.0, "KNOCKED", "DERRIBADO ~ulll L 150 ^"))
@@ -82,9 +82,68 @@ class EventGroupPlannerTests(unittest.TestCase):
         planner.add_event(event(33.0, "SQUAD_ELIMINATED", "ESCUADRON ELIMINADO 100"))
         groups = planner.finish()
 
-        self.assertEqual(len(groups), 2)
-        self.assertEqual([item.kind for item in groups[0].events], ["KNOCKED", "ELIMINATED"])
-        self.assertEqual(groups[1].label, "SQUAD_ELIMINATED")
+        self.assertEqual(len(groups), 1)
+        self.assertEqual(groups[0].label, "SQUAD_ELIMINATED")
+        self.assertEqual([item.kind for item in groups[0].events], ["KNOCKED", "ELIMINATED", "KNOCKED", "SQUAD_ELIMINATED"])
+
+    def test_repeated_victim_extends_clip_without_counting_another_kill(self) -> None:
+        planner = EventGroupPlanner(self.settings)
+        self.assertEqual(self.settings.event_merge_gap_seconds, 50.0)
+        self.assertTrue(planner.add_event(event(100.0, "ELIMINATED", "xNopperabe R301 VictimOne")))
+        self.assertFalse(planner.add_event(event(107.0, "ELIMINATED", "xNopperabe R301 VictimOne")))
+        planner.advance(108.0)
+        planner.advance(109.0)
+        self.assertFalse(planner.add_event(event(115.0, "ELIMINATED", "xNopperabe R301 VictimOne")))
+        assert planner.active is not None
+        self.assertEqual(len(planner.active.events), 1)
+        self.assertEqual(planner.active.last_event_at, 100.0)
+        self.assertEqual(planner.active.last_activity_at, 115.0)
+        self.assertEqual(planner.active.clip_end, 120.0)
+
+        # The #106–#107 gap was 43.29 seconds after the last OCR reading.
+        planner.advance(158.28)
+        self.assertIsNotNone(planner.active)
+        self.assertTrue(planner.add_event(event(158.29, "ELIMINATED", "xNopperabe R301 VictimTwo")))
+        planner.advance(208.28)
+        self.assertIsNotNone(planner.active)
+        planner.advance(208.29)
+        self.assertIsNone(planner.active)
+        self.assertEqual(len(planner.completed), 1)
+        group = planner.completed[0]
+        self.assertEqual(len(group.events), 2)
+        self.assertAlmostEqual(group.clip_end, 163.29)
+
+    def test_unreadable_center_text_is_not_a_victim_identity(self) -> None:
+        planner = EventGroupPlanner(self.settings)
+        self.assertTrue(planner.add_event(event(10.0, "KNOCKED", "DERRIBADO 811071 150")))
+        self.assertFalse(planner.add_event(event(11.0, "KNOCKED", "DERRIBADO ~ulll L 150 ^")))
+        self.assertFalse(planner.add_event(event(12.0, "KNOCKED", "DERRIBADO")))
+        assert planner.active is not None
+        self.assertEqual(len(planner.active.events), 1)
+        self.assertEqual(planner.active.last_activity_at, 12.0)
+        self.assertEqual(planner.active.clip_end, 17.0)
+        self.assertTrue(planner.add_event(event(21.0, "KNOCKED", "DERRIBADO")))
+        self.assertEqual(len(planner.active.events), 2)
+
+    def test_known_victim_matches_across_an_ambiguous_notification(self) -> None:
+        planner = EventGroupPlanner(self.settings)
+        self.assertTrue(planner.add_event(event(10.0, "KNOCKED", "DERRIBADO VictimOne 100")))
+        self.assertTrue(planner.add_event(event(20.0, "KNOCKED", "DERRIBADO")))
+        self.assertFalse(planner.add_event(event(21.0, "KNOCKED", "DERRIBADO VictimOne 100")))
+        self.assertEqual(len(planner.finish()[0].events), 2)
+
+    def test_similar_but_distinct_victims_are_counted(self) -> None:
+        planner = EventGroupPlanner(self.settings)
+        self.assertTrue(planner.add_event(event(10.0, "ELIMINATED", "xNopperabe R301 Enemy1234")))
+        self.assertTrue(planner.add_event(event(11.0, "ELIMINATED", "xNopperabe R301 Enemy1235")))
+        self.assertEqual(len(planner.finish()[0].events), 2)
+
+    def test_two_readable_center_victims_count_as_two_knocks(self) -> None:
+        planner = EventGroupPlanner(self.settings)
+        self.assertTrue(planner.add_event(event(10.0, "KNOCKED", "DERRIBADO VictimOne 100")))
+        self.assertTrue(planner.add_event(event(11.0, "KNOCKED", "DERRIBADO VictimTwo 100")))
+        self.assertFalse(planner.add_event(event(12.0, "KNOCKED", "DERRIBADO VictimOne 100")))
+        self.assertEqual(len(planner.finish()[0].events), 2)
 
     def test_watermark_finalizes_group_without_waiting_for_another_event(self) -> None:
         planner = EventGroupPlanner(self.settings, merge_gap_seconds=8.0)
